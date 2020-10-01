@@ -13,24 +13,35 @@
 #include <stdio.h> 
 #include <pthread.h>
 #include <unistd.h>
+#include <math.h>
+#include <bits/stdc++.h> 
 
+#include <iostream>
+#include <cmath>
+#include <vector>
+#include <algorithm>
+#include <set> 
+#include <iterator> 
+using namespace std;
 #define LMAX 255
+ vector <map <int,int> > bucket;
 
 char *non_option_argument;  /*unsorted file.txt which will be passed as command line argument*/
 char *sorted_file;          /*file to which the sorted elements from the unsorted array will be put*/
-size_t idx = 0;             /* index of array of no of lines  */
+int idx = 0;             /* index of array of no of lines  */
 int merge_flag = 0;           /*if algo selected for sorting the unsorted file is merge, merge flag will be 1*/
 int quick_flag = 0;           /*if algo selected for sorting the unsorted file is quick, merge flag will be 1*/
-////~
+int bucket_flag = 0;
+
 int thread_count = 0;
-pthread_t* threads;
-size_t* args;
+
 pthread_barrier_t bar;
-struct timespec start, end;
-////~
+struct timespec start, end_time;
+pthread_mutex_t lock1 = PTHREAD_MUTEX_INITIALIZER;
+
 size_t it = 0;              /*  variable iterator  */
 
-/////~
+
 typedef struct fjmerge_sort
 { 
     int low_array_index_m;
@@ -38,7 +49,7 @@ typedef struct fjmerge_sort
     int thread_number_merge;
     int *thread_array;
 }FJ_Merge;
-FJ_Merge *thread_array_merge;
+
 
 typedef struct fjquick_sort
 { 
@@ -50,11 +61,14 @@ typedef struct fjquick_sort
 typedef struct lkbucket_sort
 { 
     int array_length;
-    int bucket_decider;
+    int bucket_divider;
     int thread_number_bucket;
     int *thread_array_bucket;
+    int low_array_index_b;
+    int high_array_index_b;
 }LK_Bucket;
-/////~
+
+
 
 //-----------------------------------QUICK SORT-------------------------------------------//
 // function which swaps the  two elements 
@@ -180,20 +194,37 @@ void mergeSort( int arr[], int left, int right )
         merge( arr, left, mid, right ); 
     } 
 } 
-/////~
-void global_init_m( )
-{
-    threads = malloc( thread_count * sizeof( pthread_t ));
-    args = malloc( thread_count * sizeof( size_t ));
-    thread_array_merge = malloc( thread_count * sizeof( FJ_Merge ));
-    pthread_barrier_init( &bar, NULL, thread_count );
-}
 
-void global_cleanup_m( )
+
+
+/* UTILITY FUNCTIONS */
+/* Function to print an array */
+void printArray(int A[], int size) 
+{ 
+    int i; 
+    for (i = 0; i < size; i++) 
+        printf("%d ", A[i]); 
+    printf("\n"); 
+} 
+
+int get_range( int array[], int size, int threadcount )
 {
-    free( threads );
-    free( args );
-    pthread_barrier_destroy( &bar );
+    int location = 0;
+    int divider,c;
+    int buckets = threadcount;
+    int max = 0;
+    for (int i=0;i<size;i++)
+    {
+        printf("array[%d]=%d",i,array[i]);
+    }
+    for (c = 1; c < size; c++)
+    if (array[c] > array[location])
+      location = c;
+      printf("LOCATION=%d",location);
+    max = *max_element(array, array + size);
+    printf("\nMAX=%d\n",max);
+    divider = ceil(float(max+1)/buckets);
+    return divider;
 }
 
 void* mergesort_thread( void *args )
@@ -218,13 +249,49 @@ void* mergesort_thread( void *args )
   
         merge( tid.thread_array, left, mid, right ); 
     }
-
+        int i; 
+    for (i = 0; i < right - left +1; i++) 
+        printf("%d ", tid.thread_array[i]); 
     pthread_barrier_wait( &bar );
-    if ( tid.thread_number_merge == 1 )
-        clock_gettime( CLOCK_MONOTONIC, &end );
+//   if ( tid.thread_number_merge == 1 )
+//         clock_gettime( CLOCK_MONOTONIC, &end_time );
     return 0;    
 }
-//////~
+
+void * bucket_sort_thread( void *args )
+{
+    
+
+    LK_Bucket tid = *(( LK_Bucket* )args );
+	int i = 0, j = 0;
+
+	pthread_barrier_wait(&bar);
+    if(tid.thread_number_bucket == 1 ){
+        clock_gettime(CLOCK_MONOTONIC,&start);
+    }
+    pthread_barrier_wait(&bar);
+///printf("tid.bucket_divider = %d",tid.bucket_divider);
+    printf( "\n-----------------------------Thread %u reporting for duty------------------------\n",tid.thread_number_bucket );
+  
+	//insert element into bucket
+	for (i = tid.low_array_index_b; i <= tid.high_array_index_b; i++) {
+        printf("thread_array=%d",tid.thread_array_bucket[i]);
+		j = ( tid.thread_array_bucket[i] / tid.bucket_divider );
+        printf("\nj value = %d\n ",j);
+  ////      printf("\ni value = %d\n",i);
+			pthread_mutex_lock(&lock1);
+			////~bucket[j].insert(tid.thread_array_bucket[i]);
+            			bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]});
+
+			pthread_mutex_unlock(&lock1);
+	}
+
+    pthread_barrier_wait( &bar );
+    // if ( tid.thread_number_bucket == 1 )
+    //     clock_gettime( CLOCK_MONOTONIC, &end_time );
+	return 0;
+}
+
 int *file()
 {
         char **array = NULL;        /* array of pointers to char        */ 
@@ -244,7 +311,7 @@ int *file()
         point to (hold the address of) the beginning of each string read from
         the file below. This will allow access to each string with array[x].
         */
-        if (!( array = calloc ( LMAX, sizeof * array ) ) ) 
+        if (!( array = (char**)calloc ( LMAX, sizeof * array ) ) ) 
         {
             fprintf ( stderr, "error: memory allocation failed." );
             return (int *)1;
@@ -271,7 +338,7 @@ int *file()
             array[ idx++ ] = strdup ( ln );
 
             if ( idx == lmax ) {      /* if lmax lines reached, realloc   */
-                char **tmp = realloc ( array, lmax * 2 * sizeof * array );
+                char **tmp = (char**)realloc ( array, lmax * 2 * sizeof * array );
                 if ( !tmp )
                     return (int *)-1;
                 array = tmp;
@@ -296,7 +363,7 @@ int *file()
 
         char *endptr[ idx ]; 
         int count = 0;
-
+printf("the value of idx=%d",idx);
 
         for ( it = 0; it < idx; it++ )   
         {
@@ -313,6 +380,7 @@ int *file()
         return numbers;
 }
 
+
 int main( int argc, char **argv )
 {
     int character;                      // character which is passed from command line
@@ -320,9 +388,9 @@ int main( int argc, char **argv )
     char *option_to_argument_alg;       // it is the algorithm option, that is merge or quick sort
     char merge_sort[ 8 ] = "fjmerge";     // for comparing the option to argument alg is merge
     char quick_sort[ 8 ] = "fjquick";     // for comparing the option to argument alg is quick 
-///////~
-    char bucket_sort[ 8 ] = "lkbucket";
-///////~
+
+    char bucket_sort[ 9 ] = "lkbucket";
+
     /*maintains the long option list of arguments passes in the command line*/
     static struct option long_options[] =  {
                                                 { "alg", 1, 0, 'a' },
@@ -351,6 +419,11 @@ int main( int argc, char **argv )
                     quick_flag = 1;                          //quick flag is set
                 }
 
+                else if ( strcmp( option_to_argument_alg, bucket_sort ) == 0 )
+                {
+                    bucket_flag = 1;
+                }
+
                 break;
             }
 
@@ -366,7 +439,7 @@ int main( int argc, char **argv )
                 printf( "\nHARSH RATHORE\n" );
                 break;
             }
-//////~
+
             case 't':
             {
                 thread_count = atoi(optarg);
@@ -374,17 +447,17 @@ int main( int argc, char **argv )
                 
                 break;
             }
-///////~
+
             case '?':                   // checks if no argument is passed to option which requires an argument
             {
                 if ( optopt == 'a')
                     printf( "Option %c requires an argument merge or quick", optopt );
                 else if ( optopt == 'o' )
                     printf( "Option %c requires an argument which is the file that is the sorted file", optopt );
-               /////~
+               
                 else if ( optopt == 't' )
                     thread_count = 5;
-               /////~     
+                    
                 break;
             }
             default:                    // checks for unkown character
@@ -405,7 +478,7 @@ int main( int argc, char **argv )
             
         printf("\n");
     }
-/////~
+
     if ( thread_count <= 0 )
         thread_count = 1;
     else if ( thread_count > 150 )
@@ -413,26 +486,38 @@ int main( int argc, char **argv )
         printf( "\nERROR: Too many threads\n");
         exit( -1 );
     }
-    global_init_m( );    
-//////~
+        size_t args[thread_count];
+
+
+
+
+    pthread_t threads[thread_count];
+    pthread_barrier_init( &bar, NULL, thread_count ); 
+
+
     if ( merge_flag == 1 )
     {
-        //////~
+        
         size_t i;
         int ret;
-        int individual_thread_array_length, size_of_array;
+        int individual_thread_array_length;
         merge_flag = 0;
         
+
         
-        //////~
         int *numbers;                             // the unsorted file is read
-        numbers = file();
-/////~        mergeSort( numbers, 0, idx - 1 );         // mergesort is done on unsorted list
-        /////~
+
+        numbers=file();
+
+        
         int low = 0;
-        size_of_array = sizeof( numbers )/sizeof( numbers[0] );
-        int final_array[ size_of_array ];
-        individual_thread_array_length = size_of_array/thread_count;
+
+        printf("sizeof array=%d",idx);
+        int final_array[ idx ];
+                FJ_Merge thread_array_merge[idx];
+        individual_thread_array_length = idx/thread_count;
+        printf("\nindividual_thread_array_length=%d\n",individual_thread_array_length);
+
         for ( i = 1; i < thread_count; i++ )
         {
             low += individual_thread_array_length;
@@ -448,7 +533,7 @@ int main( int argc, char **argv )
             else 
             {
                 thread_array_merge[ i ].low_array_index_m = low ;
-                thread_array_merge[ i ].high_array_index_m =  size_of_array - 1;
+                thread_array_merge[ i ].high_array_index_m =  idx - 1;
                 thread_array_merge[ i ].thread_array = numbers;
                 thread_array_merge[ i ].thread_number_merge = args[ i ];
             }
@@ -475,13 +560,20 @@ int main( int argc, char **argv )
             }
             printf( "Joined thread %zu\n", i + 1 );
         }
-        merge( final_array, 0, size_of_array/2, size_of_array -1 );
-        /////~
+
+        FJ_Merge *tskm = &thread_array_merge[0];
+		for (i = 1; i < thread_count; i++) {
+			FJ_Merge *tsk = &thread_array_merge[i];
+			merge(tsk->thread_array, tskm->low_array_index_m, tsk->low_array_index_m - 1, tsk->high_array_index_m);
+		}
+
+
+        
         FILE *ptri;
         ptri = fopen( sorted_file, "w" );         // the file is opened in write mode which is passes to -o option
         for (it = 0; it < idx; it++) 
         {
-            fprintf( ptri ,"%u\n", final_array[ it ] ); //the unsorted file is sorted and elements are stored in sorted file
+            fprintf( ptri ,"%u\n", numbers[ it ] ); //the unsorted file is sorted and elements are stored in sorted file
         }
         if ( ptri ) 
             fclose ( ptri );                        /* close file */
@@ -489,11 +581,12 @@ int main( int argc, char **argv )
     }
     else if ( quick_flag == 1 )    
     {
-        //////~
+        
         quick_flag = 0;
-        //////~
-        int *number ;
-        number = file();                         // the unsorted file is read
+                int *number;                             // the unsorted file is read
+         number = file();
+
+
         quickSort( number, 0, idx - 1 );         // quicksort is done on unsorted list
 
         FILE *ptr;
@@ -505,6 +598,133 @@ int main( int argc, char **argv )
         if ( ptr ) 
             fclose ( ptr );                        /* close file */
         free( number );                            //free number
+    }
+    else if ( bucket_flag == 1 )
+    
+    {
+        
+        map <int,int> single_bucket;
+        for (int i=0; i<thread_count; i++)
+        {
+            bucket.push_back(single_bucket);
+        }
+        
+        // bucket.insert(10);
+        // printf("bucket[0]=%d",bucket[0]);
+         int ret;
+         printf("idx=%d",idx);
+        bucket_flag = 0;
+        int *numbers_bucket;                             // the unsorted file is read
+
+numbers_bucket = file();
+                    for (int i=0;i<idx;i++)
+    {
+        printf("\nnumbers_bucket[%d]=%d\n",i,numbers_bucket[i]);
+    }
+    
+        // if (return_val_buck!=0)
+        //     return -1;
+        LK_Bucket thread_array_bucket[thread_count];
+        int divider;
+        divider  = get_range( numbers_bucket, idx, thread_count );
+        printf("\nDIVIDIER = %d\n",divider);
+                int low = 0;
+
+        printf("\nsizeof array=%d\n",idx);
+        int final_array[ idx ];
+        int individual_thread_array_length;
+
+        individual_thread_array_length = idx/thread_count;
+        printf("\nindividual_thread_array_length=%d\n",individual_thread_array_length);
+        int m,i;
+
+        for ( int i = 1; i < thread_count; i++ )
+        {
+            low += individual_thread_array_length;
+
+            
+            args[ i ] = i + 1;
+            m=i*individual_thread_array_length;
+            printf("m value =%d",m);
+            printf( " Creating thread %zu\n", args[ i ] );
+            if ( i == ( thread_count - 1 ) )
+            {
+                printf("idx - m = %d", idx - m );
+                thread_array_bucket[ i ].array_length = idx-m;
+                thread_array_bucket[ i ].bucket_divider = divider;
+                thread_array_bucket[ i ].thread_array_bucket = numbers_bucket;
+                thread_array_bucket[ i ].thread_number_bucket = args[ i ];
+                                                thread_array_bucket[ i ].low_array_index_b = low;
+                thread_array_bucket[ i ].high_array_index_b = idx-1;
+
+                printf("\nlow_value=%d",thread_array_bucket[ i ].low_array_index_b);
+printf("\nhigh_value=%d\n",thread_array_bucket[ i ].high_array_index_b);
+
+            }
+            else 
+            {
+                printf("array_len = %d", individual_thread_array_length );
+                thread_array_bucket[ i ].array_length = individual_thread_array_length;
+                thread_array_bucket[ i ].bucket_divider = divider;
+                thread_array_bucket[ i ].thread_array_bucket = numbers_bucket;
+                thread_array_bucket[ i ].thread_number_bucket = args[ i ];
+                                thread_array_bucket[ i ].low_array_index_b = low;
+                thread_array_bucket[ i ].high_array_index_b = low + individual_thread_array_length -1;
+                printf("\nlow_value=%d",thread_array_bucket[ i ].low_array_index_b);
+printf("\nhigh_value=%d\n",thread_array_bucket[ i ].high_array_index_b);
+            }
+           
+            ret = pthread_create( &threads[ i ], NULL, &bucket_sort_thread, &thread_array_bucket[ i ]);
+            if ( ret )
+            {
+                printf( "ERROR: pthread_create: %d\n", ret);
+                exit( -1 );
+            }
+        }
+                thread_array_bucket[ 0 ].array_length = individual_thread_array_length;
+                thread_array_bucket[ 0 ].bucket_divider = divider;
+                thread_array_bucket[ 0 ].thread_array_bucket = numbers_bucket;
+                thread_array_bucket[ 0 ].thread_number_bucket = 1;
+                thread_array_bucket[ 0 ].low_array_index_b = 0;
+                thread_array_bucket[ 0 ].high_array_index_b = individual_thread_array_length -1;
+                printf("\nlow_value=%d",thread_array_bucket[ i ].low_array_index_b);
+            printf("\nhigh_value=%d\n",thread_array_bucket[ i ].high_array_index_b);
+        bucket_sort_thread( &thread_array_bucket[ 0 ] );
+        for ( size_t i = 1; i < thread_count; i++ )
+        {
+            ret = pthread_join( threads[ i ], NULL );
+            if ( ret )
+            {
+                printf( "ERROR: pthread_join: %d\n",ret );
+                exit( -1 );
+            }
+            printf( "Joined thread %zu\n", i + 1 );
+        }
+		int vec_len = (int)bucket.size();
+        printf("Vector_len=%d\n",vec_len);
+        int final_array_count=0;
+		for (i = 0; i < vec_len; i++) {
+			for (auto iterator = bucket[i].begin(); iterator != bucket[i].end(); ++iterator)
+			{
+               
+				numbers_bucket[final_array_count] = iterator->first;
+				final_array_count++;
+			}
+		}
+
+
+        FILE *ptri;
+        ptri = fopen( sorted_file, "w" );         // the file is opened in write mode which is passes to -o option
+        for (it = 0; it < idx; it++) 
+        {
+            
+            fprintf( ptri ,"%u\n", numbers_bucket[ it ] ); //the unsorted file is sorted and elements are stored in sorted file
+        }
+     
+        if ( ptri ) 
+            fclose ( ptri );                        /* close file */
+        free( numbers_bucket );                            //free numbers pointer
+   
     }
     
     return 0;
