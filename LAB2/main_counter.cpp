@@ -168,10 +168,12 @@ typedef struct sense_variables
 {
     atomic<int> cnt ;
     atomic<int> sense ;
+    int N = thread_count;
 }barrier_sense_variables;
 barrier_sense_variables variables;
 void sense_barrier ( )
 {
+    printf("sense");
     thread_local bool my_sense = 0;
 	if (my_sense == 0) 
     {
@@ -183,7 +185,7 @@ void sense_barrier ( )
 	}
 
 	int cnt_cpy = variables.cnt.fetch_add( 1, memory_order_seq_cst );
-	if ( cnt_cpy == thread_count ) 
+	if ( cnt_cpy == variables.N ) 
     {
 		variables.cnt.store( 0, memory_order_relaxed );
 		variables.sense.store( my_sense, memory_order_seq_cst );

@@ -26,11 +26,17 @@
 #include <vector>
 #include <algorithm>
 #include <set> 
+#include <atomic>         // std::atomic_flag
+#include <thread>         // std::thread
+#include <sstream>        // std::stringstream
 #include <iterator> 
 
 #define LMAX 255                /*to read the input file */
 using namespace std;
 vector <map <int,int> > bucket; /*Uisng stl vector map to create dynamic arrays*/
+atomic<bool> lock_stream = ATOMIC_FLAG_INIT;
+atomic<int> next_num ;
+atomic<int> now_serving ;
 
 char *non_option_argument;  /*unsorted file.txt which will be passed as command line argument*/
 char *sorted_file;          /*file to which the sorted elements from the unsorted array will be put*/
@@ -40,10 +46,242 @@ int quick_flag = 0;         /*if algo selected for sorting the unsorted file is 
 int bucket_flag = 0;        /*flag indicating bucket sort is chosen*/
 int thread_count = 0;       /*count of number of threads used*/
 
+int barrier_sense_flag = 0;
+int barrier_pthread_flag = 0;
+int lock_msc_flag = 0;
+int lock_ticket_flag = 0;
+int lock_tas_flag = 0;
+int lock_ttas_flag = 0;
+int lock_pthread_flag = 0;
+//int *iteration_thread;
+
+int lock_used = 0;
+int barr_used = 0;
+pthread_mutex_t lock_pthread_mutex;
+pthread_barrier_t barrier_pthread_bar;
 pthread_barrier_t bar;      /*defining barrier*/
 struct timespec start, end_time;    /*calculate time at start and end of thread*/
 pthread_mutex_t lock1 = PTHREAD_MUTEX_INITIALIZER; /*initialize the mutex lock*/
 size_t it = 0;              /*  variable iterator  */
+
+typedef enum lock_choice
+{
+    mcs,
+    tas,
+    ttas,
+    lockPthread,
+    ticket
+}lock_choice_number;
+lock_choice_number choice_lock;
+typedef enum unlock_choice
+{
+    unlockMCS,
+    unlockTAS,
+    unlockTTAS,
+    unlockPthread,
+    unlockTICKET
+}unlock_choice_number;
+unlock_choice_number choice_unlock;
+typedef enum barrier_choice
+{
+    sense,
+    pthread_bar
+}barrier_choice_number;
+barrier_choice_number choice_barrier;
+void ttas_lock( )
+{
+    do 
+    {
+        while ( lock_stream )  continue;
+    } while ( lock_stream.exchange( true )); // actual atomic locking
+    return;
+}
+
+void ttas_unlock( )
+{
+    lock_stream.store( false );
+}
+
+void tas_lock( )
+{
+	bool expected, changed;
+    do{
+        expected = false;
+        changed = true;
+    }while(!lock_stream.compare_exchange_strong(expected,changed));
+}
+
+void tas_unlock( )
+{
+    lock_stream.store( false );
+}
+
+void ticket_lock( )
+{
+    int my_num = next_num.fetch_add(1, memory_order_seq_cst );
+    while(now_serving.load( memory_order_seq_cst)!=my_num ){}
+}
+
+void ticket_unlock( )
+{
+    now_serving.fetch_add( 1, memory_order_seq_cst );
+}
+
+class Node
+{
+public:
+	atomic<Node*> next;
+	atomic<bool> wait;
+};
+
+atomic<Node*> tail{NULL} ;
+
+
+class MCSLock 
+{
+public:
+	void acquire(Node *myNode) {
+
+	Node *oldTail = tail.load(memory_order_seq_cst);
+	myNode->next.store(NULL, memory_order_relaxed);
+	while (!tail.compare_exchange_strong(oldTail, myNode)) {
+		oldTail = tail.load();
+	}
+// if oldTail == NULL, we’ve
+// acquired the lock
+// otherwise, wait for it
+	if (oldTail != NULL) 
+    {
+		myNode->wait.store(true, memory_order_relaxed);
+		oldTail->next.store(myNode,memory_order_seq_cst);
+		while (myNode->wait.load(memory_order_seq_cst)) {}
+	}
+}
+
+	void release(Node *myNode) {
+
+		Node* temp_node = myNode;
+        // no one is waiting, and we just
+        // freed the lock
+		if (tail.compare_exchange_strong( temp_node, NULL, memory_order_seq_cst )) 
+        {
+
+		} 
+
+        // hand lock to next waiting thread
+        else 
+        {
+			while (myNode->next.load(memory_order_seq_cst) == NULL) {}
+			myNode->next.load()->wait.store(false,memory_order_seq_cst);
+		}
+	}
+};
+MCSLock lockMCS;
+typedef struct sense_variables
+{
+    atomic<int> cnt ;
+    atomic<int> sense ;
+    int N=thread_count;
+}barrier_sense_variables;
+barrier_sense_variables variables;
+void sense_barrier ( )
+{
+    printf("sense");
+//    variables.N=thread_count;
+    thread_local bool my_sense = 0;
+	if (my_sense == 0) 
+    {
+		my_sense = 1;
+	} 
+    else 
+    {
+		my_sense = 0;
+	}
+
+	int cnt_cpy = variables.cnt.fetch_add( 1 );
+	if ( cnt_cpy == variables.N ) 
+    {
+		variables.cnt.store( 0, memory_order_relaxed );
+		variables.sense.store( my_sense );
+	} 
+    else 
+    {
+		while (variables.sense.load() != my_sense);
+	}
+}
+
+
+// typedef struct barrier_type
+// {
+//     int counter; // initialize to 0
+//     int flag; // initialize to 0
+//     std::mutex lock;
+// }barrier_variables;
+// barrier_variables *b=NULL;
+// int local_sense = 0; // private per processor
+
+// // barrier for p processors
+// void sense_barrier()
+// {
+//     local_sense = 1 - local_sense;
+//     b->lock.lock();
+//     b->counter++;
+//     int arrived = b->counter;
+//     if (arrived == thread_count) // last arriver sets flag
+//     {
+//         b->lock.unlock();
+//         b->counter = 0;
+//         // memory fence to ensure that the change to counter
+//         // is seen before the change to flag
+//         b->flag = local_sense;
+//     }
+//     else
+//     {
+//         b->lock.unlock();
+//         while (b->flag != local_sense); // wait for flag
+//     }
+// }
+// typedef struct sense_variables
+// {
+//     atomic<int> cnt ;
+//     atomic<int> sense ;
+// }barrier_sense_variables;
+// int my_sense=0;
+// barrier_sense_variables variables;
+// void sense_barrier ( )
+// {
+//     my_sense = (my_sense==0)?1:0;
+//     int arrived=++(variables.cnt);
+
+// //	int cnt_cpy = variables.cnt.fetch_add( 1 );
+// 	if ( variables.cnt == thread_count ) 
+//     {
+//         variables.cnt=0;
+//         variables.sense=my_sense;
+//             // variables.cnt.store( 1, memory_order_relaxed );
+//             // variables.sense.store( my_sense );
+// 	} 
+//     else 
+//     {
+// 		while (variables.sense != my_sense);
+// 	}
+// }
+
+void pthread_lock ()
+{
+	pthread_mutex_lock(&lock_pthread_mutex);
+}
+
+void pthread_unlock ()
+{
+	pthread_mutex_unlock(&lock_pthread_mutex);
+}
+
+void pthread_barrier ()
+{
+	pthread_barrier_wait(&barrier_pthread_bar);
+}
+
 
 typedef struct fjmerge_sort
 { 
@@ -226,12 +464,46 @@ void* mergesort_thread( void *args )
 {
     int left, right, mid;
     FJ_Merge tid = *(( FJ_Merge* )args );       /* dereference the pointer */
-    pthread_barrier_wait( &bar );               /* barrier wait */
+
+    switch( choice_barrier )
+    {
+        case( sense ):
+        {
+//                    printf("sense");
+            sense_barrier( );
+            break;
+        }
+        case( pthread_bar ): 
+        {
+                    printf("pthread_bar  ");
+            pthread_barrier();
+            break;
+        }
+
+    }
+    //pthread_barrier_wait( &bar );               /* barrier wait */
     if ( tid.thread_number_merge == 1 )
         clock_gettime( CLOCK_MONOTONIC, &start ); /* get clock time at the start */
     left = tid.low_array_index_m;                 /* left index */
     right = tid.high_array_index_m;               /* right index */
-    pthread_barrier_wait(&bar);                   /* barrier wait */  
+
+    switch( choice_barrier )
+    {
+        case( sense ):
+        {
+//                    printf("sense");
+            sense_barrier( );
+            break;
+        }
+        case( pthread_bar ): 
+        {
+                    printf("pthread_bar  ");
+            pthread_barrier();
+            break;
+        }
+
+    }
+    //pthread_barrier_wait(&bar);                   /* barrier wait */  
     printf( "\nThread %u reporting for duty\n",tid.thread_number_merge );
 
     if ( left < right ) 
@@ -245,9 +517,24 @@ void* mergesort_thread( void *args )
         merge( tid.thread_array, left, mid, right ); 
     }
     
-    pthread_barrier_wait( &bar );
-//   if ( tid.thread_number_merge == 1 )
-//         clock_gettime( CLOCK_MONOTONIC, &end_time );   /* end clock timer */
+    switch( choice_barrier )
+    {
+        case( sense ):
+        {
+//                    printf("sense");
+            sense_barrier( );
+            break;
+        }
+        case( pthread_bar ): 
+        {
+                    printf("pthread_bar  ");
+            pthread_barrier();
+            break;
+        }
+
+    }
+    //pthread_barrier_wait( &bar );
+
     return 0;    
 }
 
@@ -258,24 +545,119 @@ void * bucket_sort_thread( void *args )
     LK_Bucket tid = *(( LK_Bucket* )args );
 	int i = 0, j = 0;
 
-	pthread_barrier_wait(&bar);
+
+    switch( choice_barrier )
+    {
+        case( sense ):
+        {
+//                    printf("sense");
+            sense_barrier( );
+            break;
+        }
+        case( pthread_bar ): 
+        {
+                    printf("pthread_bar  ");
+            pthread_barrier();
+            break;
+        }
+
+    }
+      
     if(tid.thread_number_bucket == 1 ){
         clock_gettime(CLOCK_MONOTONIC,&start);      /* start the clock */
     }
-    pthread_barrier_wait(&bar);
+        switch( choice_barrier )
+    {
+        case( sense ):
+        {
+//                    printf("sense");
+            sense_barrier( );
+            break;
+        }
+        case( pthread_bar ): 
+        {
+                    printf("pthread_bar  ");
+            pthread_barrier();
+            break;
+        }
+
+    }
+    //pthread_barrier_wait(&bar);
     printf( "\n-----------------------------Thread %u reporting for duty------------------------\n",tid.thread_number_bucket );
   
+
 	/* the element size is seen compared to max and put in respective sorted buckets */
 	for (i = tid.low_array_index_b; i <= tid.high_array_index_b; i++) {
-		j = ( tid.thread_array_bucket[i] / tid.bucket_divider );
-			pthread_mutex_lock(&lock1);
-            bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */
-			pthread_mutex_unlock(&lock1);
-	}
+		j = ( tid.thread_array_bucket[i] / tid.bucket_divider );	
+//        pthread_mutex_lock(&lock1);
 
-    pthread_barrier_wait( &bar );
-    // if ( tid.thread_number_bucket == 1 )
-    //     clock_gettime( CLOCK_MONOTONIC, &end_time );   /* end the clock */
+                switch( choice_lock )
+                {
+                    case( ticket ):
+                    {
+                        printf("ticket");
+                        ticket_lock();
+        bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
+                        ticket_unlock();
+                        continue;
+                    }
+                    case( tas ):
+                    {
+                        printf("tas");
+                        tas_lock();
+        bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
+                        tas_unlock();
+                        continue;
+                    }
+                    case( ttas ):
+                    {
+                        printf("ttas");
+                        ttas_lock();
+        bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
+                        ttas_unlock();
+                        continue;
+                    }
+                    case( lockPthread ):
+                    {
+                        printf("pthread");
+                        pthread_lock();
+        bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
+                        pthread_unlock();
+                        continue;
+                    }
+                    case( mcs ):
+                    {
+                        printf("mcs");
+                        Node *mynode = new Node;
+                        lockMCS.acquire(mynode);
+        bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
+                        lockMCS.release(mynode);
+                        continue;
+                    }
+                
+                }
+        // bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
+	
+//        pthread_mutex_unlock(&lock1);
+    }
+    switch( choice_barrier )
+    {
+        case( sense ):
+        {
+//                    printf("sense");
+            sense_barrier( );
+            break;
+        }
+        case( pthread_bar ): 
+        {
+                    printf("pthread_bar  ");
+            pthread_barrier();
+            break;
+        }
+
+    }
+    //pthread_barrier_wait( &bar );
+
 	return 0;
 }
 
@@ -366,19 +748,30 @@ int main( int argc, char **argv )
     int character;                      // character which is passed from command line
     int option_index = 0;               // the index of options
     char *option_to_argument_alg;       // it is the algorithm option, that is merge or quick sort
-    char merge_sort[ 8 ] = "fjmerge";     // for comparing the option to argument alg is merge
+    char *option_to_argument_bar;       // it is the algorithm option, that is sense or pthread barrier
+    char *option_to_argument_lock;       // it is the algorithm option, for lock
+    char merge_sort[ 3 ] = "fj";     // for comparing the option to argument alg is merge
     char quick_sort[ 8 ] = "fjquick";     // for comparing the option to argument alg is quick 
-    char bucket_sort[ 9 ] = "lkbucket";
+    char bucket_sort[ 7 ] = "bucket";
+    char barrier_sense[ 6 ] = "sense";     // for comparing the option to argument barrier is sense
+    char barrier_pthread[ 8 ] = "pthread";     // for comparing the option to argument barrier is pthread 
+    char lock_tas[ 4 ] = "tas";         // for comparing the option to argument lock is tas 
+    char lock_ttas[ 9 ] = "ttas";       // for comparing the option to argument lock is ttas 
+    char lock_ticket[ 7 ] = "ticket";   // for comparing the option to argument lock is ticket 
+    char lock_msc[ 4 ] = "mcs";         // for comparing the option to argument lock is mcs 
+    char lock_pthread[ 8 ]="pthread";   // for comparing the option to argument lock is pthread
 
     /*maintains the long option list of arguments passes in the command line*/
     static struct option long_options[] =  {
+                                                { "bar", 1, 0, 'b' },
                                                 { "alg", 1, 0, 'a' },
+                                                { "lock", 1, 0, 'l' },
                                                 { "name", 0, 0, 'n' },
 						                        { "thread", 1, 0, 't' },
                                                 { 0, 0, 0, 0 }
                                             };
     /*checks if all characters or aguments passed in the command line have been read*/
-    while (( character = getopt_long( argc, argv, "a:no:t:", long_options, &option_index )) != -1 )
+    while (( character = getopt_long( argc, argv, "a:b:l:no:t:", long_options, &option_index )) != -1 )
     {
         switch( character )
         {
@@ -401,6 +794,71 @@ int main( int argc, char **argv )
                 else if ( strcmp( option_to_argument_alg, bucket_sort ) == 0 )
                 {
                     bucket_flag = 1;                         // bucket flag is set
+                }
+
+                break;
+            }
+
+            case 'b':                   // checks if alg is passed
+            {
+                barr_used = 1;
+                printf( "\n--bar-> option = %s\n", optarg ); //prints the algorithm option which is sense or pthread
+                option_to_argument_bar = optarg;             //optarg maintains the argument
+                                                             //strcmp the value of option passed to --bar is sense
+                if ( strcmp( option_to_argument_bar, barrier_sense ) == 0 )
+                {
+                    barrier_sense_flag = 1;                          // barrier sense flag is set
+                    choice_barrier = sense;
+                }  
+                                                             // strcmp the value of option passed to --bar is pthread
+                else if ( strcmp( option_to_argument_bar, barrier_pthread ) == 0 ) 
+                {
+                    barrier_pthread_flag = 1;                          // barrier pthread flag is set
+                    choice_barrier = pthread_bar;
+                }
+
+                break;
+            }
+
+            case 'l':                   // checks if alg is passed
+            {
+                lock_used = 1;
+                printf( "\n--lock-> option = %s\n", optarg ); //prints the algorithm option which is sense or pthread
+                option_to_argument_lock = optarg;             //optarg maintains the argument
+                                                             //strcmp the value of option passed to --bar is sense
+                if ( strcmp( option_to_argument_lock, lock_msc ) == 0 )
+                {
+                    lock_msc_flag = 1;                          // barrier sense flag is set
+                    choice_lock = mcs;
+                    choice_unlock = unlockMCS;
+                }  
+                                                             // strcmp the value of option passed to --bar is pthread
+                else if ( strcmp( option_to_argument_lock, lock_pthread ) == 0 ) 
+                {
+                    lock_pthread_flag = 1;                          // barrier pthread flag is set
+                    choice_lock = lockPthread;
+                    choice_unlock = unlockPthread;
+                }
+
+                else if ( strcmp( option_to_argument_lock, lock_tas ) == 0 ) 
+                {
+                    lock_tas_flag = 1;                          // barrier pthread flag is set
+                    choice_lock = tas;
+                    choice_unlock = unlockTAS;
+                }
+
+                else if ( strcmp( option_to_argument_lock, lock_ttas ) == 0 ) 
+                {
+                    lock_ttas_flag = 1;                          // barrier pthread flag is set
+                    choice_lock = ttas;
+                    choice_unlock = unlockTTAS;
+                }
+
+                else if ( strcmp( option_to_argument_lock, lock_ticket ) == 0 ) 
+                {
+                    lock_ticket_flag = 1;                          // barrier pthread flag is set
+                    choice_lock = ticket;
+                    choice_unlock = unlockTICKET;
                 }
 
                 break;
@@ -433,10 +891,12 @@ int main( int argc, char **argv )
                     printf( "Option %c requires an argument merge or quick", optopt );
                 else if ( optopt == 'o' )
                     printf( "Option %c requires an argument which is the file that is the sorted file", optopt );
-               
                 else if ( optopt == 't' )
                     thread_count = 5;           /* if no option specified take thread as 5 */
-                    
+                else if ( optopt == 'b')
+                    printf( "Option %c requires an argument pthread or sense", optopt );  
+                else if ( optopt == 'l')
+                    printf( "Option %c requires an argument pthread or sense", optopt ); 
                 break;
             }
             default:                    // checks for unkown character
@@ -456,6 +916,11 @@ int main( int argc, char **argv )
         }
             
         printf("\n");
+    }
+
+    if (barr_used==1 && choice_barrier==pthread_bar)
+    {
+        pthread_barrier_init( &barrier_pthread_bar, NULL, thread_count ); 
     }
 
     if ( thread_count <= 0 )
@@ -534,6 +999,15 @@ int main( int argc, char **argv )
 		}
 
         clock_gettime(CLOCK_MONOTONIC,&end_time);
+
+        if (barr_used==1 && choice_barrier==pthread_bar)
+        {
+		    pthread_barrier_destroy(&barrier_pthread_bar);
+        }
+        if (lock_used==1 && choice_lock==lockPthread)
+        {
+		    pthread_mutex_destroy(&lock_pthread_mutex);
+        }
 		pthread_barrier_destroy(&bar);
         
         FILE *ptri;
@@ -638,8 +1112,15 @@ int main( int argc, char **argv )
 		}
         clock_gettime(CLOCK_MONOTONIC,&end_time);
 
-		pthread_barrier_destroy(&bar);
-
+        if (barr_used==1 && choice_barrier==pthread_bar)
+        {
+		    pthread_barrier_destroy(&barrier_pthread_bar);
+        }
+        if (lock_used==1 && choice_lock==lockPthread)
+        {
+		    pthread_mutex_destroy(&lock_pthread_mutex);
+        }
+        pthread_barrier_destroy(&bar);
         FILE *ptri;
         ptri = fopen( sorted_file, "w" );         // the file is opened in write mode which is passes to -o option
         for (it = 0; it < idx; it++) 
