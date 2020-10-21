@@ -1,0 +1,11 @@
+### Generate a test file
+### (of unspecified range and size)
+shuf -i0-2147483643 -n382 > case1.txt
+### Sort it using sort
+sort -n case1.txt > soln1.txt
+### Run your mysort program to also sort the test file
+./mysort case1.txt -o your1.txt --alg=fj -t 10 --bar=pthread --lock=tas
+
+./counter -o out.txt -t 10 -i 100 --bar=pthread --lock=tas 
+### Compare test results
+cmp --silent your1.txt soln1.txt && echo "Pass (5pts)" || echo "Fail (0pts)"

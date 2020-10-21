@@ -90,11 +90,7 @@ typedef enum barrier_choice
 barrier_choice_number choice_barrier;
 void ttas_lock( )
 {
-    do 
-    {
-        while ( lock_stream )  continue;
-    } while ( lock_stream.exchange( true )); // actual atomic locking
-    return;
+        while (lock_stream.load()==true || lock_stream.exchange(false)){}
 }
 
 void ttas_unlock( )
@@ -104,11 +100,7 @@ void ttas_unlock( )
 
 void tas_lock( )
 {
-	bool expected, changed;
-    do{
-        expected = false;
-        changed = true;
-    }while(!lock_stream.compare_exchange_strong(expected,changed));
+    while(lock_stream.exchange(false)){}
 }
 
 void tas_unlock( )
@@ -157,7 +149,6 @@ public:
 		while (myNode->wait.load(memory_order_seq_cst)) {}
 	}
 }
-
 	void release(Node *myNode) {
 
 		Node* temp_node = myNode;
@@ -186,8 +177,6 @@ typedef struct sense_variables
 barrier_sense_variables variables;
 void sense_barrier ( )
 {
-    printf("sense");
-//    variables.N=thread_count;
     thread_local bool my_sense = 0;
 	if (my_sense == 0) 
     {
@@ -210,63 +199,6 @@ void sense_barrier ( )
 	}
 }
 
-
-// typedef struct barrier_type
-// {
-//     int counter; // initialize to 0
-//     int flag; // initialize to 0
-//     std::mutex lock;
-// }barrier_variables;
-// barrier_variables *b=NULL;
-// int local_sense = 0; // private per processor
-
-// // barrier for p processors
-// void sense_barrier()
-// {
-//     local_sense = 1 - local_sense;
-//     b->lock.lock();
-//     b->counter++;
-//     int arrived = b->counter;
-//     if (arrived == thread_count) // last arriver sets flag
-//     {
-//         b->lock.unlock();
-//         b->counter = 0;
-//         // memory fence to ensure that the change to counter
-//         // is seen before the change to flag
-//         b->flag = local_sense;
-//     }
-//     else
-//     {
-//         b->lock.unlock();
-//         while (b->flag != local_sense); // wait for flag
-//     }
-// }
-// typedef struct sense_variables
-// {
-//     atomic<int> cnt ;
-//     atomic<int> sense ;
-// }barrier_sense_variables;
-// int my_sense=0;
-// barrier_sense_variables variables;
-// void sense_barrier ( )
-// {
-//     my_sense = (my_sense==0)?1:0;
-//     int arrived=++(variables.cnt);
-
-// //	int cnt_cpy = variables.cnt.fetch_add( 1 );
-// 	if ( variables.cnt == thread_count ) 
-//     {
-//         variables.cnt=0;
-//         variables.sense=my_sense;
-//             // variables.cnt.store( 1, memory_order_relaxed );
-//             // variables.sense.store( my_sense );
-// 	} 
-//     else 
-//     {
-// 		while (variables.sense != my_sense);
-// 	}
-// }
-
 void pthread_lock ()
 {
 	pthread_mutex_lock(&lock_pthread_mutex);
@@ -281,7 +213,6 @@ void pthread_barrier ()
 {
 	pthread_barrier_wait(&barrier_pthread_bar);
 }
-
 
 typedef struct fjmerge_sort
 { 
@@ -434,16 +365,6 @@ void mergeSort( int arr[], int left, int right )
     } 
 } 
 
-/* UTILITY FUNCTIONS */
-/* Function to print an array */
-void printArray(int A[], int size) 
-{ 
-    int i; 
-    for (i = 0; i < size; i++) 
-        printf("%d ", A[i]); 
-    printf("\n"); 
-} 
-
 /* divider for bucket to calculate which elements of the input array go to which file */
 int get_range( int arr[], int size, int threadcount )
 {
@@ -469,19 +390,16 @@ void* mergesort_thread( void *args )
     {
         case( sense ):
         {
-//                    printf("sense");
             sense_barrier( );
             break;
         }
         case( pthread_bar ): 
         {
-                    printf("pthread_bar  ");
             pthread_barrier();
             break;
         }
 
     }
-    //pthread_barrier_wait( &bar );               /* barrier wait */
     if ( tid.thread_number_merge == 1 )
         clock_gettime( CLOCK_MONOTONIC, &start ); /* get clock time at the start */
     left = tid.low_array_index_m;                 /* left index */
@@ -491,19 +409,16 @@ void* mergesort_thread( void *args )
     {
         case( sense ):
         {
-//                    printf("sense");
             sense_barrier( );
             break;
         }
         case( pthread_bar ): 
         {
-                    printf("pthread_bar  ");
             pthread_barrier();
             break;
         }
 
     }
-    //pthread_barrier_wait(&bar);                   /* barrier wait */  
     printf( "\nThread %u reporting for duty\n",tid.thread_number_merge );
 
     if ( left < right ) 
@@ -521,20 +436,16 @@ void* mergesort_thread( void *args )
     {
         case( sense ):
         {
-//                    printf("sense");
             sense_barrier( );
             break;
         }
         case( pthread_bar ): 
         {
-                    printf("pthread_bar  ");
             pthread_barrier();
             break;
         }
 
     }
-    //pthread_barrier_wait( &bar );
-
     return 0;    
 }
 
@@ -550,13 +461,11 @@ void * bucket_sort_thread( void *args )
     {
         case( sense ):
         {
-//                    printf("sense");
             sense_barrier( );
             break;
         }
         case( pthread_bar ): 
         {
-                    printf("pthread_bar  ");
             pthread_barrier();
             break;
         }
@@ -570,13 +479,11 @@ void * bucket_sort_thread( void *args )
     {
         case( sense ):
         {
-//                    printf("sense");
             sense_barrier( );
             break;
         }
         case( pthread_bar ): 
         {
-                    printf("pthread_bar  ");
             pthread_barrier();
             break;
         }
@@ -587,76 +494,65 @@ void * bucket_sort_thread( void *args )
   
 
 	/* the element size is seen compared to max and put in respective sorted buckets */
-	for (i = tid.low_array_index_b; i <= tid.high_array_index_b; i++) {
+	for (i = tid.low_array_index_b; i <= tid.high_array_index_b; i++) 
+    {
 		j = ( tid.thread_array_bucket[i] / tid.bucket_divider );	
-//        pthread_mutex_lock(&lock1);
 
-                switch( choice_lock )
-                {
-                    case( ticket ):
-                    {
-                        printf("ticket");
-                        ticket_lock();
-        bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
-                        ticket_unlock();
-                        continue;
-                    }
-                    case( tas ):
-                    {
-                        printf("tas");
-                        tas_lock();
-        bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
-                        tas_unlock();
-                        continue;
-                    }
-                    case( ttas ):
-                    {
-                        printf("ttas");
-                        ttas_lock();
-        bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
-                        ttas_unlock();
-                        continue;
-                    }
-                    case( lockPthread ):
-                    {
-                        printf("pthread");
-                        pthread_lock();
-        bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
-                        pthread_unlock();
-                        continue;
-                    }
-                    case( mcs ):
-                    {
-                        printf("mcs");
-                        Node *mynode = new Node;
-                        lockMCS.acquire(mynode);
-        bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
-                        lockMCS.release(mynode);
-                        continue;
-                    }
-                
-                }
-        // bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
-	
-//        pthread_mutex_unlock(&lock1);
+        switch( choice_lock )
+        {
+            case( ticket ):
+            {
+                ticket_lock();
+                bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
+                ticket_unlock();
+                continue;
+            }
+            case( tas ):
+            {
+                tas_lock();
+                bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
+                tas_unlock();
+                continue;
+            }
+            case( ttas ):
+            {
+                ttas_lock();
+                bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
+                ttas_unlock();
+                continue;
+            }
+            case( lockPthread ):
+            {
+                pthread_lock();
+                bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
+                pthread_unlock();
+                continue;
+            }
+            case( mcs ):
+            {
+                Node *mynode = new Node;
+                lockMCS.acquire(mynode);
+                bucket[j].insert({tid.thread_array_bucket[i],tid.thread_array_bucket[i]}); /* elements inserted in bucket map having key and value */	
+                lockMCS.release(mynode);
+                continue;
+            }
+        
+        }	
     }
     switch( choice_barrier )
     {
         case( sense ):
         {
-//                    printf("sense");
             sense_barrier( );
             break;
         }
         case( pthread_bar ): 
         {
-                    printf("pthread_bar  ");
             pthread_barrier();
             break;
         }
 
     }
-    //pthread_barrier_wait( &bar );
 
 	return 0;
 }
@@ -951,7 +847,6 @@ int main( int argc, char **argv )
         {
             low += individual_thread_array_length;
             args[ i ] = i + 1;
-            printf( " Creating thread %zu\n", args[ i ] );
             if ( i != ( thread_count - 1 ) )                        // values of low index, high index, thread number and assigning the merge array
             {
                 thread_array_merge[ i ].low_array_index_m = low ;
@@ -989,7 +884,6 @@ int main( int argc, char **argv )
                 printf( "ERROR: pthread_join: %d\n",ret );
                 exit( -1 );
             }
-            printf( "Joined thread %zu\n", i + 1 );
         }
 
         FJ_Merge *tskm = &thread_array_merge[0];                                        // merge sub arrays one by one such that we get final merge array
@@ -1059,7 +953,6 @@ int main( int argc, char **argv )
         {
             args[ i ] = i + 1;                                  // thread number
             index = i*individual_thread_array_length;           // to calculate array length
-            printf( " Creating thread %zu\n", args[ i ] );
 
             if ( i == ( thread_count - 1 ) )                    // fill the structure with array length, divider, array for bucket, thread number, low index and high index
             {
@@ -1097,7 +990,6 @@ int main( int argc, char **argv )
                 printf( "ERROR: pthread_join: %d\n",ret );
                 exit( -1 );
             }
-            printf( "Joined thread %zu\n", i + 1 );
         }
 
 		int bucket_number = (int)bucket.size();
