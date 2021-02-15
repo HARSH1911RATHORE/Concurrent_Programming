@@ -1,0 +1,35 @@
+Node with key 40 contains value 999
+
+Thread 15 "bst" received signal SIGSEGV, Segmentation fault.
+[Switching to Thread 0x7fffcf7fe700 (LWP 474)]
+0x000055555555a14c in __gnu_cxx::new_allocator<fg_range>::construct<fg_range, fg_range> (this=0x55555575e300 <range_info_fg_function>, __p=0xfffffffff7fffd80)
+    at /usr/include/c++/7/ext/new_allocator.h:136
+136             { ::new((void *)__p) _Up(std::forward<_Args>(__args)...); }
+(gdb) r
+The program being debugged has been started already.
+Start it from the beginning? (y or n) n
+Program not restarted.
+(gdb) bt
+#0  0x000055555555a14c in __gnu_cxx::new_allocator<fg_range>::construct<fg_range, fg_range> (this=0x55555575e300 <range_info_fg_function>, __p=0xfffffffff7fffd80)
+    at /usr/include/c++/7/ext/new_allocator.h:136
+#1  0x0000555555559ad1 in std::allocator_traits<std::allocator<fg_range> >::construct<fg_range, fg_range> (__a=..., __p=0xfffffffff7fffd80) at /usr/include/c++/7/bits/alloc_traits.h:475
+#2  0x0000555555559bdc in std::vector<fg_range, std::allocator<fg_range> >::_M_realloc_insert<fg_range> (this=0x55555575e300 <range_info_fg_function>, 
+    __position=non-dereferenceable iterator for std::vector) at /usr/include/c++/7/bits/vector.tcc:415
+#3  0x000055555555962a in std::vector<fg_range, std::allocator<fg_range> >::emplace_back<fg_range> (this=0x55555575e300 <range_info_fg_function>) at /usr/include/c++/7/bits/vector.tcc:105
+#4  0x00005555555592d2 in std::vector<fg_range, std::allocator<fg_range> >::push_back (this=0x55555575e300 <range_info_fg_function>, __x=...) at /usr/include/c++/7/bits/stl_vector.h:954
+#5  0x00005555555564bb in get_nodes_inrange (root=0x7ffff0003e40, key_begin=54, key_last=99) at bst_1.c:744
+#6  0x0000555555556470 in get_nodes_inrange (root=0x7ffff0003df0, key_begin=54, key_last=99) at bst_1.c:735
+#7  0x0000555555556508 in get_nodes_inrange (root=0x7ffff0003990, key_begin=54, key_last=99) at bst_1.c:753
+#8  0x0000555555556508 in get_nodes_inrange (root=0x7ffff00037b0, key_begin=54, key_last=99) at bst_1.c:753
+#9  0x0000555555556508 in get_nodes_inrange (root=0x7ffff0003300, key_begin=54, key_last=99) at bst_1.c:753
+#10 0x0000555555556470 in get_nodes_inrange (root=0x7ffff0003260, key_begin=54, key_last=99) at bst_1.c:735
+#11 0x0000555555556470 in get_nodes_inrange (root=0x7ffff0003120, key_begin=54, key_last=99) at bst_1.c:735
+#12 0x0000555555556470 in get_nodes_inrange (root=0x7ffff0003080, key_begin=54, key_last=99) at bst_1.c:735
+#13 0x0000555555556470 in get_nodes_inrange (root=0x7ffff0002fe0, key_begin=54, key_last=99) at bst_1.c:735
+#14 0x0000555555556470 in get_nodes_inrange (root=0x7ffff0002f40, key_begin=54, key_last=99) at bst_1.c:735
+#15 0x0000555555556508 in get_nodes_inrange (root=0x7ffff0002e00, key_begin=54, key_last=99) at bst_1.c:753
+#16 0x0000555555556508 in get_nodes_inrange (root=0x7ffff0002db0, key_begin=54, key_last=99) at bst_1.c:753
+#17 0x0000555555556470 in get_nodes_inrange (root=0x7ffff0002d60, key_begin=54, key_last=99) at bst_1.c:735
+#18 0x000055555555719e in range_handler (arg=0x7fffffffccbc) at bst_1.c:1136
+#19 0x00007ffff761c6db in start_thread (arg=0x7fffcf7fe700) at pthread_create.c:463
+#20 0x00007ffff734588f in clone () at ../sysdeps/unix/sysv/linux/x86_64/clone.S:95
