@@ -1,4 +1,4 @@
-Sorting using Merge sort and Quick sort
+LAB0
 -------------------------------------
 
 INTRODUCTION
