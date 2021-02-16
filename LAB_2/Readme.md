@@ -77,7 +77,7 @@ All the above experiments are performed with 50 threads and 100 iteration.
 
 ### Locks and Barrier performance stats on bucket sort application
 Sorting with 10 threads, 382 numbers and 8 digit max number with locks and barriers respectively
-![]()
+![](https://github.com/HARSH1911RATHORE/Concurrent_Programming/blob/master/LAB_2/Bucket_sort_perf.PNG)
 
 
 ### Observations
