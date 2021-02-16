@@ -3,8 +3,7 @@ LAB0 of Concurrent Programming Course
 
 INTRODUCTION
 ------------
-    This is an application developed to sort an input file with a list of integer elements and it exports the 
-    sorted list into an output file or prints it on the console.
+    This application is created to sort the input text file with random integer numbers on each line, sorted and sent to an output text file
 
 CODE ORGANIZATION
 -----------------
@@ -19,7 +18,6 @@ CODE ORGANIZATION
 -  Merge sort is an out of place sorting algorithm which needs to create duplicate arrays to execute sorting. The time complexity of merge sort is O(nlogn) and in worst case is O(n^2).
 -  Quick sort is an in place sorting algorithm which does not need to create duplicate arrays to execute sorting and executes in sorting on the same array. The time complexity of quick sort is O(nlogn) and in worst case is O(n^2).
 -  The file is read using getline which takes row of the file as row of the array and columns of the file as columns of the array. This read array is converted using strtol to an integer array. The char array which reads input of from the unsorted file uses dynamic memory allocation and reallocates for file content greater than size of initially defined array.
-
 
 
 COMPILATION INSTRUCTIONS 
