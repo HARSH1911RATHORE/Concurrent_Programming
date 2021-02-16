@@ -35,7 +35,7 @@ Consists of main.c and Makefile
 ### Parallelization strategy for Merge Sort
 
 
-  1.) The input file copied into an array will be divided into sub arrays where each individual thread will work on approximately same number of array elements.
+  	1.) The input file copied into an array will be divided into sub arrays where each individual thread will work on approximately same number of array elements.
 
 	2.) The low array index, high array index, array to be populated, thread number is calculated and passed for each thread by using a structure of these values
 
