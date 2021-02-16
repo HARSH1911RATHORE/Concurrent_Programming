@@ -70,7 +70,7 @@ The algorithms include:
 
 ### Locks and Barrier performance stats on counter application
 Counter with 10 threads and 10000 iterations with locks or barriers respectively
-![]()
+![](https://github.com/HARSH1911RATHORE/Concurrent_Programming/blob/master/LAB_2/Counter_perf.PNG)
 
 
 All the above experiments are performed with 50 threads and 100 iteration.
