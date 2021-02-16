@@ -1,4 +1,4 @@
-LAB0 of Concurrent Programming Course
+Sorting using Merge sort and Quick sort
 -------------------------------------
 
 INTRODUCTION
