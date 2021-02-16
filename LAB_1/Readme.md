@@ -10,7 +10,7 @@ algorithm uses locks to implement BucketSort across multiple sorted data structu
 
 Consists of main.c and Makefile
 - The code has been organized in two files which is the main.c and Makefile. It generates the executable mysort by running make. 
-# Description of every file 
+#### Description of every file 
 - Makefile compiles the code main.c and generates executable that can be run by typing make. 
 - main.c contains the main code of the project. This file takes the inputs as  - - name and     - - alg=fjmerge or - - alg=lkbucket. --name argument prints the full name of the person and alg argument takes options as fjmerge and lkbucket which sort the file according to the option specified. 
 - -t option takes the input as number of threads which needs to be run in parallel and execute the sorting operation
