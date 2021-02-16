@@ -59,6 +59,6 @@ Consists of main.c and Makefile
 
 	6.)	The threads are joined on completion of their unique tasks
 
- 	 7.) The individual sub arrays are then finally combined to the final main array to create a list of elements present in a sorted order.
+ 	7.) The individual sub arrays are then finally combined to the final main array to create a list of elements present in a sorted order.
   
   	8.) The individual sub arrays are then finally combined to the final main array to create a list of elements present in a sorted order.
