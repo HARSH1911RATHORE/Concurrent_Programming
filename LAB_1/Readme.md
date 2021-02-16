@@ -23,13 +23,11 @@ Consists of main.c and Makefile
 -	The file is read using getline which takes row of the file as row of the array and columns of the file as columns of the array. This read array is converted using strtol to an integer array. The char  array which reads input of from the unsorted file uses dynamic memory allocation and reallocates for file content greater than size of initially defined array.
 
 
-
 ### COMPILATION INSTRUCTION AND EXECUTION
 
 - Eg. of how to run the project. First compile the file using make which creates an executable of the name mysort. 
 - Then run the executable using the command by typing
  ./mysort - - name unsortedfile.txt -o sortedfile.txt -t10 alg=lkbucket  which sorts the unsorted file using bucket sort taking 10 number of threads OR ./mysort - - name unsortedfile.txt -o sortedfile.txt alg=fjmerge which sorts the unsorted file using merge sort and takes 10 number of parallel threads to execute the code.
-
 
 
 ### Parallelization strategy for Merge Sort
