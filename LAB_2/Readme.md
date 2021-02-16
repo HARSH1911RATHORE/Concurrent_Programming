@@ -1,4 +1,4 @@
-## LAB1 of Concurrent Programming Course
+## LAB2
 
 ### INTRODUCTION
 This application consists of three locking algorithms and one barrier algorithm. These primitives are used in  BucketSort algorithm and in a
