@@ -1,4 +1,4 @@
-## LAB1 of Concurrent Programming Course
+## LAB1 
 
 
 INTRODUCTION
