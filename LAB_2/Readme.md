@@ -42,15 +42,15 @@ The algorithms include:
 ### Parallelization strategy for Merge Sort
 
 
-    	1.) •	The input file copied into an array will be divided into sub arrays where each individual thread will work on approximately same number of array elements.
+    	1.) The input file copied into an array will be divided into sub arrays where each individual thread will work on approximately same number of array elements.
 
-	2.) •	The low array index, high array index, array to be populated, thread number is calculated and passed for each thread by using a structure of these values
+	2.) The low array index, high array index, array to be populated, thread number is calculated and passed for each thread by using a structure of these values
 
-	3.) •	New threads are created, and their specific indexes and unique parameters are passed to the merge thread function which will sort individual sub arrays using recursive merge sort.
+	3.) New threads are created, and their specific indexes and unique parameters are passed to the merge thread function which will sort individual sub arrays using recursive merge sort.
 
-	4.) •	The threads are joined on completion of their unique tasks.
+	4.) The threads are joined on completion of their unique tasks.
 
-	5.) •	The individual sub arrays are then finally merged and is sent to the sorted_file.txt  
+	5.) The individual sub arrays are then finally merged and is sent to the sorted_file.txt  
 
 ### Parallelization strategy for Bucket Sort
 
