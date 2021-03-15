@@ -101,17 +101,24 @@ void deleteid(Tree *tree, int key, int value)
 
 # Parallelization Strategy 
 •	The number of threads will vary for different functions. Each thread performs operations such that they work on equal number of tasks, which is number of items divided by thread_count – 4 for insert. The threads will have their unique iteration length-size of task, iteration number - thread id, item value – the task key. 
+
 •	Then the respective insert, get, range handlers are invoked which run all of their operations concurrently. 
+
 •	Divider for threads, that is number of tasks or length of task for which the thread will run depends on the size of file and thread count assigned to the functions.
+
 •	New threads are created, and their specific indexes and unique parameters are passed to the handler functions 
+
 •	The threads are joined on completion of their unique tasks
+
 •	Finally time taken by all of them is printed to the screen. 
 
 # Compilation instructions
 •	Eg of how to run the binary search tree project. First compile the file using make which creates an executable of the name bst. 
+
 •	Eg of how to run the Unit test. First compile the file using make which creates an executable of the name test. 
 # Execution instructions
 •	Then run the bst executable using the command by typing
+
 •	./bst  - -name -h -p insert.txt -g search.txt -r range.txt -d delete.txt -t 10 --lock=<fg_lock, rw_lock> which concurrently creates, searches the tree with the nodes having particular key and values.
 •	Then run the test executable using the command by typing
  ./test which tries to verify working of all the operations insert, get, delete, range and prints if they succeeded. 
@@ -119,6 +126,7 @@ void deleteid(Tree *tree, int key, int value)
 
 # Perf analysis Discussions
 •	Analyzing high and low contention is done by inputting values in files in a such a way that in high contention only one node key is being accessed in the entire file, which means all threads will have to come to the same node to find the value for get and between same set of keys for range.
+
 •	On the other hand the data value for file testing low contention will be spread out for different indexes, that is different keys are used such that all threads will be accessing different nodes. 
 
 
